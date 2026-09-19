@@ -81,7 +81,7 @@
     .manageCategoryRow { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 10px; }
     .manageCategoryRow span { flex: 1; text-align: left; font-weight: bold; }
     .manageCategoryRow button { background: none; border: none; color: #ffb0b0; font-size: 1.1rem; cursor: pointer; }
-    #sfxPaletteGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; max-width: 340px; }
+    #sfxPaletteGrid, #musicPresetGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; max-width: 340px; }
     .sfxBtn {
       font-family: inherit; font-weight: bold; color: #fff; background: rgba(255,255,255,0.14);
       border: 3px solid #fff; border-radius: 14px; padding: 12px 4px; cursor: pointer; font-size: 0.8rem;
@@ -175,12 +175,16 @@
     <button class="btn wide" id="addClipBtn">➕ Add Clip</button>
     <button class="btn wide" id="recordCameraBtn" style="display:none;">🎥 Record Camera</button>
     <button class="btn wide" id="recordScreenBtn" style="display:none;">🖥️ Record Screen</button>
+    <button class="btn wide" id="addMusicBtn">🎵 Add Music</button>
+    <audio id="editorMusic" loop></audio>
   </div>
   <input type="file" id="clipFileInput" accept="video/*" style="display:none;">
+  <input type="file" id="musicFileInput" accept="audio/*" style="display:none;">
 
   <div class="overlay" id="recordOverlay">
     <div class="bigTitle" id="recordOverlayTitle">🎥 Record</div>
     <video id="recordPreviewVideo" autoplay muted playsinline style="width:100%;max-width:360px;aspect-ratio:16/9;background:#000;border:4px solid #fff;border-radius:12px;"></video>
+    <div id="recordAudioIcon" style="display:none; font-size:4rem;">🎤</div>
     <div id="recordStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
     <div>
       <button class="btn" id="recordStartBtn">⏺️ Start Recording</button>
@@ -189,9 +193,24 @@
     <button class="btn" id="recordCancelBtn">✖ Cancel</button>
   </div>
 
+  <div class="overlay" id="musicOverlay">
+    <div class="bigTitle">🎵 Add Background Music</div>
+    <div id="musicPresetGrid"></div>
+    <button class="btn" id="musicRecordBtn">🎤 Record Your Own</button>
+    <button class="btn" id="musicUploadBtn">📁 Upload a Song</button>
+    <div id="musicStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
+    <div id="musicVolumeRow" class="volumeRow" style="display:none; width:100%; max-width:300px;">
+      <span>🔊</span>
+      <input type="range" id="musicVolumeSlider" min="0" max="100">
+    </div>
+    <button class="btn danger" id="musicRemoveBtn" style="display:none;">🗑️ Remove Music</button>
+    <button class="btn" id="musicDoneBtn">✅ Done</button>
+  </div>
+
   <div id="watchScreen">
     <button id="watchExitBtn">✖</button>
     <video id="watchVideo" playsinline></video>
+    <audio id="watchMusic" loop></audio>
     <div id="watchInfoBar"></div>
   </div>
 
@@ -384,6 +403,95 @@
       if (fn) fn(ctx, ctx.currentTime);
     }
 
+    // ---------------- background music presets (procedurally composed, no audio files) ----------------
+    var MUSIC_PRESETS = [
+      {
+        id: "happy", emoji: "🎉", label: "Happy", wave: "triangle", loopLength: 4,
+        notes: [
+          { freq: 523.25, start: 0.0, dur: 0.35 }, { freq: 659.25, start: 0.4, dur: 0.35 },
+          { freq: 783.99, start: 0.8, dur: 0.35 }, { freq: 1046.5, start: 1.2, dur: 0.5 },
+          { freq: 783.99, start: 2.0, dur: 0.35 }, { freq: 659.25, start: 2.4, dur: 0.35 },
+          { freq: 523.25, start: 2.8, dur: 0.6 }
+        ]
+      },
+      {
+        id: "adventure", emoji: "🚀", label: "Adventure", wave: "sawtooth", loopLength: 4,
+        notes: [
+          { freq: 196.0, start: 0.0, dur: 0.2 }, { freq: 246.94, start: 0.25, dur: 0.2 },
+          { freq: 293.66, start: 0.5, dur: 0.2 }, { freq: 392.0, start: 0.75, dur: 0.4 },
+          { freq: 293.66, start: 1.5, dur: 0.2 }, { freq: 246.94, start: 1.75, dur: 0.2 },
+          { freq: 196.0, start: 2.0, dur: 0.2 }, { freq: 392.0, start: 2.5, dur: 0.5 },
+          { freq: 293.66, start: 3.2, dur: 0.4 }
+        ]
+      },
+      {
+        id: "calm", emoji: "😌", label: "Calm", wave: "sine", loopLength: 4,
+        notes: [
+          { freq: 261.63, start: 0.0, dur: 1.5 }, { freq: 329.63, start: 1.5, dur: 1.2 },
+          { freq: 392.0, start: 2.7, dur: 1.2 }
+        ]
+      },
+      {
+        id: "silly", emoji: "🤪", label: "Silly", wave: "square", loopLength: 3,
+        notes: [
+          { freq: 440.0, start: 0.0, dur: 0.12 }, { freq: 880.0, start: 0.15, dur: 0.12 },
+          { freq: 330.0, start: 0.3, dur: 0.12 }, { freq: 660.0, start: 0.45, dur: 0.12 },
+          { freq: 550.0, start: 0.7, dur: 0.2 }, { freq: 220.0, start: 1.0, dur: 0.15 },
+          { freq: 990.0, start: 1.2, dur: 0.1 }, { freq: 440.0, start: 1.5, dur: 0.3 },
+          { freq: 660.0, start: 2.0, dur: 0.2 }, { freq: 330.0, start: 2.3, dur: 0.3 }
+        ]
+      }
+    ];
+    function audioBufferToWavBlob(buffer) {
+      var numChannels = buffer.numberOfChannels;
+      var sampleRate = buffer.sampleRate;
+      var samples = buffer.length;
+      var blockAlign = numChannels * 2;
+      var byteRate = sampleRate * blockAlign;
+      var dataSize = samples * blockAlign;
+      var arrBuffer = new ArrayBuffer(44 + dataSize);
+      var view = new DataView(arrBuffer);
+      function writeStr(offset, str) { for (var i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); }
+      writeStr(0, "RIFF"); view.setUint32(4, 36 + dataSize, true); writeStr(8, "WAVE");
+      writeStr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, 16, true);
+      writeStr(36, "data"); view.setUint32(40, dataSize, true);
+      var offset = 44;
+      var channelData = [];
+      for (var ch = 0; ch < numChannels; ch++) channelData.push(buffer.getChannelData(ch));
+      for (var i = 0; i < samples; i++) {
+        for (var ch2 = 0; ch2 < numChannels; ch2++) {
+          var sample = clampNum(channelData[ch2][i], -1, 1);
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+          offset += 2;
+        }
+      }
+      return new Blob([arrBuffer], { type: "audio/wav" });
+    }
+    function renderMusicPreset(preset) {
+      return new Promise(function (resolve) {
+        var AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        if (!AC) { resolve(null); return; }
+        var sampleRate = 44100;
+        var ctx = new AC(2, Math.ceil(sampleRate * preset.loopLength), sampleRate);
+        preset.notes.forEach(function (n) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = preset.wave || "triangle";
+          osc.frequency.value = n.freq;
+          gain.gain.setValueAtTime(0.0001, n.start);
+          gain.gain.linearRampToValueAtTime(0.28, n.start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, n.start + n.dur);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(n.start); osc.stop(n.start + n.dur + 0.05);
+        });
+        ctx.startRendering().then(function (renderedBuffer) {
+          resolve(audioBufferToWavBlob(renderedBuffer));
+        }).catch(function () { resolve(null); });
+      });
+    }
+
     // ---------------- state ----------------
     var movies = [];
     var categories = [];
@@ -392,7 +500,7 @@
     var sfxTargetClipIndex = -1;
 
     function newDraftProject() {
-      return { id: uid("movie"), title: "", clips: [], categoryIds: [], isFavorite: false, createdAt: Date.now() };
+      return { id: uid("movie"), title: "", clips: [], categoryIds: [], isFavorite: false, createdAt: Date.now(), music: null };
     }
     function newClip(file, objectUrl) {
       return {
@@ -568,7 +676,7 @@
     }
 
     // ---------------- playback engine (shared: editor preview + watch mode) ----------------
-    function makePlaybackEngine(videoEl) {
+    function makePlaybackEngine(videoEl, musicEl) {
       var proj = null;
       var clipIndex = 0;
       var onClipChange = null;
@@ -577,10 +685,24 @@
       function load(project, startIndex, startTime) {
         proj = project;
         clipIndex = startIndex || 0;
+        if (musicEl) {
+          if (proj.music) {
+            if (musicEl.src !== proj.music.objectUrl) musicEl.src = proj.music.objectUrl;
+            musicEl.loop = true;
+            musicEl.volume = proj.music.volume;
+          } else {
+            musicEl.pause();
+            musicEl.removeAttribute("src");
+          }
+        }
         playClipAt(clipIndex, startTime);
       }
       function playClipAt(idx, atTime) {
-        if (!proj || idx >= proj.clips.length) { if (onEnd) onEnd(); return; }
+        if (!proj || idx >= proj.clips.length) {
+          if (musicEl) musicEl.pause();
+          if (onEnd) onEnd();
+          return;
+        }
         var clip = proj.clips[idx];
         clip.soundEffects.forEach(function (sfx) { sfx._fired = false; });
         videoEl.src = clip.objectUrl;
@@ -601,8 +723,18 @@
         if (videoEl.currentTime >= clip.trimEnd) { playClipAt(clipIndex + 1); clipIndex++; }
       }
       videoEl.addEventListener("timeupdate", handleTimeUpdate);
+      function play() {
+        videoEl.play();
+        if (musicEl && proj && proj.music) musicEl.play();
+      }
+      function pause() {
+        videoEl.pause();
+        if (musicEl) musicEl.pause();
+      }
       return {
         load: load,
+        play: play,
+        pause: pause,
         jumpTo: function (idx, atTime) { clipIndex = idx; playClipAt(idx, atTime); },
         getClipIndex: function () { return clipIndex; },
         onClipChange: function (cb) { onClipChange = cb; },
@@ -616,18 +748,18 @@
       var m = findById(movies, movieId);
       if (!m || !m.clips.length) return;
       if (!watchEngine) {
-        watchEngine = makePlaybackEngine(document.getElementById("watchVideo"));
+        watchEngine = makePlaybackEngine(document.getElementById("watchVideo"), document.getElementById("watchMusic"));
         watchEngine.onClipChange(function (idx) {
           document.getElementById("watchInfoBar").textContent = "Clip " + (idx + 1) + " of " + m.clips.length;
         });
         watchEngine.onEnd(function () { exitWatch(); });
       }
       watchEngine.load(m, 0);
-      document.getElementById("watchVideo").play();
+      watchEngine.play();
       document.getElementById("watchScreen").style.display = "flex";
     }
     function exitWatch() {
-      document.getElementById("watchVideo").pause();
+      if (watchEngine) watchEngine.pause();
       document.getElementById("watchScreen").style.display = "none";
     }
 
@@ -638,15 +770,16 @@
       document.getElementById("libraryScreen").style.display = "none";
       document.getElementById("editorScreen").style.display = "block";
       if (!editorEngine) {
-        editorEngine = makePlaybackEngine(document.getElementById("previewVideo"));
+        editorEngine = makePlaybackEngine(document.getElementById("previewVideo"), document.getElementById("editorMusic"));
         editorEngine.onClipChange(function (idx) { sfxTargetClipIndex = idx; });
       }
       updateRecordButtonsVisibility();
       renderEditor();
     }
     function closeEditor() {
-      document.getElementById("previewVideo").pause();
+      editorEngine.pause();
       draftProject.clips.forEach(function (c) { if (c.objectUrl) URL.revokeObjectURL(c.objectUrl); });
+      if (draftProject.music && draftProject.music.objectUrl) URL.revokeObjectURL(draftProject.music.objectUrl);
       draftProject = null;
       document.getElementById("editorScreen").style.display = "none";
       document.getElementById("libraryScreen").style.display = "block";
@@ -685,9 +818,12 @@
     function canRecordAtAll() { return !!(navigator.mediaDevices && window.MediaRecorder); }
     function canRecordCamera() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
     function canRecordScreen() { return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.MediaRecorder); }
-    function pickRecordingMimeType() {
+    function canRecordAudio() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+    function pickRecordingMimeType(mode) {
       if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
-      var candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+      var candidates = mode === "audio"
+        ? ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
+        : ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
       for (var i = 0; i < candidates.length; i++) {
         if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
       }
@@ -700,19 +836,26 @@
     function openRecordOverlay(mode) {
       recordMode = mode;
       recordedChunks = [];
-      document.getElementById("recordOverlayTitle").textContent = mode === "screen" ? "🖥️ Record Screen" : "🎥 Record Camera";
+      var titles = { camera: "🎥 Record Camera", screen: "🖥️ Record Screen", audio: "🎤 Record Audio" };
+      document.getElementById("recordOverlayTitle").textContent = titles[mode] || "Record";
+      document.getElementById("recordPreviewVideo").style.display = mode === "audio" ? "none" : "block";
+      document.getElementById("recordAudioIcon").style.display = mode === "audio" ? "block" : "none";
       document.getElementById("recordStatus").textContent = "Getting ready...";
       document.getElementById("recordStartBtn").style.display = "none";
       document.getElementById("recordStopBtn").style.display = "none";
       document.getElementById("recordOverlay").style.display = "flex";
       var mediaPromise = mode === "screen"
         ? navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        : mode === "audio"
+        ? navigator.mediaDevices.getUserMedia({ audio: true })
         : navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       mediaPromise.then(function (stream) {
         recordStream = stream;
-        var preview = document.getElementById("recordPreviewVideo");
-        preview.srcObject = stream;
-        preview.play();
+        if (mode !== "audio") {
+          var preview = document.getElementById("recordPreviewVideo");
+          preview.srcObject = stream;
+          preview.play();
+        }
         document.getElementById("recordStatus").textContent = "";
         document.getElementById("recordStartBtn").style.display = "inline-block";
       }).catch(function () {
@@ -722,14 +865,16 @@
     function startRecording() {
       if (!recordStream) return;
       recordedChunks = [];
-      var mimeType = pickRecordingMimeType();
+      var mimeType = pickRecordingMimeType(recordMode);
       mediaRecorder = mimeType ? new MediaRecorder(recordStream, { mimeType: mimeType }) : new MediaRecorder(recordStream);
       mediaRecorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.onstop = function () {
-        var blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
+        var fallbackType = recordMode === "audio" ? "audio/webm" : "video/webm";
+        var blob = new Blob(recordedChunks, { type: mimeType || fallbackType });
         stopRecordStreamTracks();
         document.getElementById("recordOverlay").style.display = "none";
-        addClipFromFile(blob);
+        if (recordMode === "audio") setProjectMusic(blob);
+        else addClipFromFile(blob);
       };
       mediaRecorder.start();
       document.getElementById("recordStartBtn").style.display = "none";
@@ -744,12 +889,61 @@
     }
     function cancelRecordOverlay() {
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.onstop = null; // don't add a clip when the user cancels mid-recording
+        mediaRecorder.onstop = null; // don't add a clip/music when the user cancels mid-recording
         mediaRecorder.stop();
       }
       stopRecordStreamTracks();
       document.getElementById("recordPreviewVideo").srcObject = null;
       document.getElementById("recordOverlay").style.display = "none";
+    }
+
+    // ---------------- background music picker ----------------
+    function setProjectMusic(blob) {
+      if (draftProject.music && draftProject.music.objectUrl) URL.revokeObjectURL(draftProject.music.objectUrl);
+      var objectUrl = URL.createObjectURL(blob);
+      var prevVolume = draftProject.music ? draftProject.music.volume : 0.5;
+      draftProject.music = { blob: blob, objectUrl: objectUrl, volume: prevVolume };
+      updateMusicOverlayUI();
+      renderEditor();
+    }
+    function removeMusic() {
+      if (draftProject.music && draftProject.music.objectUrl) URL.revokeObjectURL(draftProject.music.objectUrl);
+      draftProject.music = null;
+      updateMusicOverlayUI();
+      renderEditor();
+    }
+    function updateMusicOverlayUI() {
+      var has = !!draftProject.music;
+      document.getElementById("musicVolumeRow").style.display = has ? "flex" : "none";
+      document.getElementById("musicRemoveBtn").style.display = has ? "inline-block" : "none";
+      document.getElementById("musicRecordBtn").style.display = canRecordAudio() ? "inline-block" : "none";
+      if (has) document.getElementById("musicVolumeSlider").value = Math.round(draftProject.music.volume * 100);
+    }
+    function openMusicPicker() {
+      renderMusicPresetGrid();
+      updateMusicOverlayUI();
+      document.getElementById("musicStatus").textContent = "";
+      document.getElementById("musicOverlay").style.display = "flex";
+    }
+    function closeMusicPicker() { document.getElementById("musicOverlay").style.display = "none"; }
+    function renderMusicPresetGrid() {
+      var grid = document.getElementById("musicPresetGrid");
+      grid.innerHTML = "";
+      MUSIC_PRESETS.forEach(function (preset) {
+        var b = document.createElement("button");
+        b.className = "sfxBtn";
+        b.innerHTML = '<span class="sfxEmoji">' + preset.emoji + '</span>' + preset.label;
+        b.addEventListener("click", function () { selectMusicPreset(preset); });
+        grid.appendChild(b);
+      });
+    }
+    function selectMusicPreset(preset) {
+      document.getElementById("musicStatus").textContent = "🎵 Loading...";
+      renderMusicPreset(preset).then(function (blob) {
+        if (!blob) { document.getElementById("musicStatus").textContent = "😅 Music isn't supported in this browser."; return; }
+        setProjectMusic(blob);
+        document.getElementById("musicStatus").textContent = "";
+      });
     }
 
     function renderEditor() {
@@ -940,6 +1134,7 @@
       var record = {
         id: draftProject.id, title: title, categoryIds: checked, isFavorite: false,
         createdAt: draftProject.createdAt, thumbnail: draftProject.thumbnail,
+        music: draftProject.music ? { blob: draftProject.music.blob, volume: draftProject.music.volume } : null,
         clips: draftProject.clips.map(function (c) {
           return { id: c.id, blob: c.blob, duration: c.duration, trimStart: c.trimStart, trimEnd: c.trimEnd, speed: c.speed, volume: c.volume, soundEffects: c.soundEffects, thumbnail: c.thumbnail };
         })
@@ -953,6 +1148,7 @@
     }
     function hydrateMovie(record) {
       record.clips.forEach(function (c) { if (!c.objectUrl && c.blob) c.objectUrl = URL.createObjectURL(c.blob); });
+      if (record.music && !record.music.objectUrl && record.music.blob) record.music.objectUrl = URL.createObjectURL(record.music.blob);
       return record;
     }
 
@@ -973,11 +1169,25 @@
     document.getElementById("recordCancelBtn").addEventListener("click", cancelRecordOverlay);
     document.getElementById("previewPlayBtn").addEventListener("click", function () {
       var v = document.getElementById("previewVideo");
-      if (v.paused) { v.play(); document.getElementById("previewPlayBtn").textContent = "⏸️ Pause"; }
-      else { v.pause(); document.getElementById("previewPlayBtn").textContent = "▶️ Play"; }
+      if (v.paused) { editorEngine.play(); document.getElementById("previewPlayBtn").textContent = "⏸️ Pause"; }
+      else { editorEngine.pause(); document.getElementById("previewPlayBtn").textContent = "▶️ Play"; }
     });
     document.getElementById("addSfxBtn").addEventListener("click", openSfxPalette);
     document.getElementById("sfxPaletteCancelBtn").addEventListener("click", closeSfxPalette);
+
+    document.getElementById("addMusicBtn").addEventListener("click", openMusicPicker);
+    document.getElementById("musicDoneBtn").addEventListener("click", closeMusicPicker);
+    document.getElementById("musicRemoveBtn").addEventListener("click", removeMusic);
+    document.getElementById("musicRecordBtn").addEventListener("click", function () { openRecordOverlay("audio"); });
+    document.getElementById("musicUploadBtn").addEventListener("click", function () { document.getElementById("musicFileInput").click(); });
+    document.getElementById("musicFileInput").addEventListener("change", function (e) {
+      var file = e.target.files[0];
+      if (file) setProjectMusic(file);
+      e.target.value = "";
+    });
+    document.getElementById("musicVolumeSlider").addEventListener("input", function (e) {
+      if (draftProject.music) draftProject.music.volume = e.target.value / 100;
+    });
 
     document.getElementById("saveMovieCancelBtn").addEventListener("click", function () { document.getElementById("saveMovieOverlay").style.display = "none"; });
     document.getElementById("saveMovieConfirmBtn").addEventListener("click", confirmSaveMovie);
