@@ -95,6 +95,12 @@
       overflow: hidden; position: relative;
     }
     #animDrawSurface { width: 100%; height: 100%; display: block; touch-action: none; }
+    #animOnionSurface {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; opacity: 0.32; filter: blur(3px); display: none;
+    }
+    #animOnionSurface.on { display: block; }
+    #animOnionBtn.on { box-shadow: 0 0 0 2px #ffd76b; }
     .colorRow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
     .colorSwatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.5); cursor: pointer; padding: 0; }
     .colorSwatch.selected { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 0 2px #ffd76b; }
@@ -241,10 +247,14 @@
 
   <div class="overlay" id="animationOverlay">
     <div class="bigTitle">🎨 Animation Movie</div>
-    <div id="animDrawWrap"><canvas id="animDrawSurface" width="480" height="360"></canvas></div>
+    <div id="animDrawWrap">
+      <canvas id="animDrawSurface" width="480" height="360"></canvas>
+      <canvas id="animOnionSurface" width="480" height="360"></canvas>
+    </div>
     <div class="colorRow" id="animColorRow"></div>
     <div class="sizeRow" id="animSizeRow"></div>
     <button class="btn small" id="animClearBtn">🧹 Clear Drawing</button>
+    <button class="btn small" id="animOnionBtn">👻 Onion Skin</button>
     <button class="btn" id="animAddFrameBtn">➕ Add Frame</button>
     <div id="animFrameFilmstrip"></div>
     <div class="volumeRow" style="width:100%; max-width:340px;">
@@ -1267,13 +1277,31 @@
     var animBrushSize = ANIM_SIZES[1].w;
     var animSpeedMs = ANIM_SPEED_DEFAULT;
     var animCtx = null;
+    var animOnionCtx = null;
+    var animOnionOn = false;
     var animDrawing = false;
     var animLastX = 0, animLastY = 0;
     var animPreviewTimer = null;
 
+    function renderOnionSkin() {
+      var onionCanvas = document.getElementById("animOnionSurface");
+      var btn = document.getElementById("animOnionBtn");
+      btn.className = "btn small" + (animOnionOn ? " on" : "");
+      var showIt = animOnionOn && animFrames.length > 0;
+      onionCanvas.className = showIt ? "on" : "";
+      if (!showIt) return;
+      var img = new Image();
+      img.onload = function () {
+        animOnionCtx.clearRect(0, 0, ANIM_CANVAS_W, ANIM_CANVAS_H);
+        animOnionCtx.drawImage(img, 0, 0, ANIM_CANVAS_W, ANIM_CANVAS_H);
+      };
+      img.src = animFrames[animFrames.length - 1];
+    }
+
     function initAnimCanvas() {
       var canvas = document.getElementById("animDrawSurface");
       animCtx = canvas.getContext("2d");
+      animOnionCtx = document.getElementById("animOnionSurface").getContext("2d");
       canvas.addEventListener("pointerdown", function (e) {
         e.preventDefault();
         animDrawing = true;
@@ -1345,7 +1373,7 @@
         var img = document.createElement("img");
         img.src = dataUrl;
         thumb.appendChild(img);
-        thumb.addEventListener("click", function () { animFrames.splice(idx, 1); renderAnimFrameFilmstrip(); });
+        thumb.addEventListener("click", function () { animFrames.splice(idx, 1); renderAnimFrameFilmstrip(); renderOnionSkin(); });
         wrap.appendChild(thumb);
       });
       document.getElementById("animDoneBtn").disabled = animFrames.length === 0;
@@ -1355,6 +1383,7 @@
       animFrames.push(canvas.toDataURL("image/png"));
       clearAnimCanvas();
       renderAnimFrameFilmstrip();
+      renderOnionSkin();
     }
     function updateAnimSpeedLabel() {
       document.getElementById("animSpeedLabel").textContent = animSpeedMs + "ms";
@@ -1424,11 +1453,13 @@
       animColor = ANIM_COLORS[0];
       animBrushSize = ANIM_SIZES[1].w;
       animSpeedMs = ANIM_SPEED_DEFAULT;
+      animOnionOn = false;
       if (!animCtx) initAnimCanvas();
       clearAnimCanvas();
       renderAnimColorRow();
       renderAnimSizeRow();
       renderAnimFrameFilmstrip();
+      renderOnionSkin();
       document.getElementById("animSpeedSlider").value = animSpeedMs;
       updateAnimSpeedLabel();
       document.getElementById("animStatus").textContent = "";
@@ -1511,6 +1542,7 @@
     document.getElementById("newMovieChoiceCancelBtn").addEventListener("click", closeNewMovieChoice);
 
     document.getElementById("animClearBtn").addEventListener("click", clearAnimCanvas);
+    document.getElementById("animOnionBtn").addEventListener("click", function () { animOnionOn = !animOnionOn; renderOnionSkin(); });
     document.getElementById("animAddFrameBtn").addEventListener("click", addAnimFrame);
     document.getElementById("animSpeedSlider").addEventListener("input", function (e) {
       animSpeedMs = clampNum(parseInt(e.target.value, 10) || ANIM_SPEED_DEFAULT, ANIM_SPEED_MIN, ANIM_SPEED_MAX);
