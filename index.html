@@ -173,8 +173,21 @@
     </div>
     <div id="editorClipList"></div>
     <button class="btn wide" id="addClipBtn">➕ Add Clip</button>
+    <button class="btn wide" id="recordCameraBtn" style="display:none;">🎥 Record Camera</button>
+    <button class="btn wide" id="recordScreenBtn" style="display:none;">🖥️ Record Screen</button>
   </div>
   <input type="file" id="clipFileInput" accept="video/*" style="display:none;">
+
+  <div class="overlay" id="recordOverlay">
+    <div class="bigTitle" id="recordOverlayTitle">🎥 Record</div>
+    <video id="recordPreviewVideo" autoplay muted playsinline style="width:100%;max-width:360px;aspect-ratio:16/9;background:#000;border:4px solid #fff;border-radius:12px;"></video>
+    <div id="recordStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
+    <div>
+      <button class="btn" id="recordStartBtn">⏺️ Start Recording</button>
+      <button class="btn danger" id="recordStopBtn" style="display:none;">⏹️ Stop Recording</button>
+    </div>
+    <button class="btn" id="recordCancelBtn">✖ Cancel</button>
+  </div>
 
   <div id="watchScreen">
     <button id="watchExitBtn">✖</button>
@@ -628,6 +641,7 @@
         editorEngine = makePlaybackEngine(document.getElementById("previewVideo"));
         editorEngine.onClipChange(function (idx) { sfxTargetClipIndex = idx; });
       }
+      updateRecordButtonsVisibility();
       renderEditor();
     }
     function closeEditor() {
@@ -661,6 +675,83 @@
         clip.thumbnail = canvas.toDataURL("image/jpeg", 0.7);
       } catch (e) { /* thumbnail is a nice-to-have, safe to skip on failure */ }
     }
+
+    // ---------------- record from the computer (camera or screen), no phone needed ----------------
+    var recordStream = null;
+    var mediaRecorder = null;
+    var recordedChunks = [];
+    var recordMode = null;
+
+    function canRecordAtAll() { return !!(navigator.mediaDevices && window.MediaRecorder); }
+    function canRecordCamera() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+    function canRecordScreen() { return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.MediaRecorder); }
+    function pickRecordingMimeType() {
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+      var candidates = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+      for (var i = 0; i < candidates.length; i++) {
+        if (MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+      }
+      return "";
+    }
+    function updateRecordButtonsVisibility() {
+      document.getElementById("recordCameraBtn").style.display = canRecordCamera() ? "block" : "none";
+      document.getElementById("recordScreenBtn").style.display = canRecordScreen() ? "block" : "none";
+    }
+    function openRecordOverlay(mode) {
+      recordMode = mode;
+      recordedChunks = [];
+      document.getElementById("recordOverlayTitle").textContent = mode === "screen" ? "🖥️ Record Screen" : "🎥 Record Camera";
+      document.getElementById("recordStatus").textContent = "Getting ready...";
+      document.getElementById("recordStartBtn").style.display = "none";
+      document.getElementById("recordStopBtn").style.display = "none";
+      document.getElementById("recordOverlay").style.display = "flex";
+      var mediaPromise = mode === "screen"
+        ? navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        : navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      mediaPromise.then(function (stream) {
+        recordStream = stream;
+        var preview = document.getElementById("recordPreviewVideo");
+        preview.srcObject = stream;
+        preview.play();
+        document.getElementById("recordStatus").textContent = "";
+        document.getElementById("recordStartBtn").style.display = "inline-block";
+      }).catch(function () {
+        document.getElementById("recordStatus").textContent = "😅 Couldn't get permission. Check your browser settings and try again!";
+      });
+    }
+    function startRecording() {
+      if (!recordStream) return;
+      recordedChunks = [];
+      var mimeType = pickRecordingMimeType();
+      mediaRecorder = mimeType ? new MediaRecorder(recordStream, { mimeType: mimeType }) : new MediaRecorder(recordStream);
+      mediaRecorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = function () {
+        var blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
+        stopRecordStreamTracks();
+        document.getElementById("recordOverlay").style.display = "none";
+        addClipFromFile(blob);
+      };
+      mediaRecorder.start();
+      document.getElementById("recordStartBtn").style.display = "none";
+      document.getElementById("recordStopBtn").style.display = "inline-block";
+      document.getElementById("recordStatus").textContent = "🔴 Recording...";
+    }
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+    }
+    function stopRecordStreamTracks() {
+      if (recordStream) { recordStream.getTracks().forEach(function (t) { t.stop(); }); recordStream = null; }
+    }
+    function cancelRecordOverlay() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.onstop = null; // don't add a clip when the user cancels mid-recording
+        mediaRecorder.stop();
+      }
+      stopRecordStreamTracks();
+      document.getElementById("recordPreviewVideo").srcObject = null;
+      document.getElementById("recordOverlay").style.display = "none";
+    }
+
     function renderEditor() {
       var hasClips = draftProject.clips.length > 0;
       document.getElementById("previewEmptyMsg").style.display = hasClips ? "none" : "flex";
@@ -875,6 +966,11 @@
       if (file) addClipFromFile(file);
       e.target.value = "";
     });
+    document.getElementById("recordCameraBtn").addEventListener("click", function () { openRecordOverlay("camera"); });
+    document.getElementById("recordScreenBtn").addEventListener("click", function () { openRecordOverlay("screen"); });
+    document.getElementById("recordStartBtn").addEventListener("click", startRecording);
+    document.getElementById("recordStopBtn").addEventListener("click", stopRecording);
+    document.getElementById("recordCancelBtn").addEventListener("click", cancelRecordOverlay);
     document.getElementById("previewPlayBtn").addEventListener("click", function () {
       var v = document.getElementById("previewVideo");
       if (v.paused) { v.play(); document.getElementById("previewPlayBtn").textContent = "⏸️ Pause"; }
