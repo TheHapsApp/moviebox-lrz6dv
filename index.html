@@ -88,6 +88,30 @@
     }
     .sfxBtn .sfxEmoji { font-size: 1.6rem; display: block; margin-bottom: 2px; }
 
+    /* ---------------- new-movie choice / animation / scenes ---------------- */
+    #newMovieChoiceOverlay .btn, #scenesOverlay .btn { width: 100%; max-width: 320px; }
+    #animDrawWrap {
+      width: 100%; max-width: 360px; aspect-ratio: 4/3; border: 4px solid #fff; border-radius: 12px;
+      overflow: hidden; position: relative;
+    }
+    #animDrawSurface { width: 100%; height: 100%; display: block; touch-action: none; }
+    .colorRow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+    .colorSwatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.5); cursor: pointer; padding: 0; }
+    .colorSwatch.selected { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 0 2px #ffd76b; }
+    .sizeRow { display: flex; gap: 8px; }
+    .sizeBtn {
+      font-family: inherit; font-weight: bold; color: #fff; background: rgba(255,255,255,0.15);
+      border: 3px solid #fff; border-radius: 12px; padding: 6px 12px; cursor: pointer;
+    }
+    .sizeBtn.selected { background: rgba(255,215,107,0.5); }
+    #animFrameFilmstrip { display: flex; gap: 6px; overflow-x: auto; padding: 6px 2px; width: 100%; max-width: 360px; }
+    .animFrameThumb {
+      flex-shrink: 0; width: 48px; height: 36px; border-radius: 6px; border: 3px solid rgba(255,255,255,0.5);
+      cursor: pointer; overflow: hidden; padding: 0; position: relative;
+    }
+    .animFrameThumb img { width: 100%; height: 100%; object-fit: cover; }
+    #scenesMovieList { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 320px; text-align: left; }
+
     /* ---------------- editor ---------------- */
     #editorScreen { max-width: 480px; margin: 0 auto; display: none; }
     #editorTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -207,6 +231,43 @@
     <button class="btn" id="musicDoneBtn">✅ Done</button>
   </div>
 
+  <div class="overlay" id="newMovieChoiceOverlay">
+    <div class="bigTitle">🎬 New Movie</div>
+    <button class="btn wide" id="choiceFilmBtn">🎥 Film It</button>
+    <button class="btn wide" id="choiceAnimationBtn">🎨 Animation Movie</button>
+    <button class="btn wide" id="choiceScenesBtn">🎬 Scenes</button>
+    <button class="btn" id="newMovieChoiceCancelBtn">✖ Cancel</button>
+  </div>
+
+  <div class="overlay" id="animationOverlay">
+    <div class="bigTitle">🎨 Animation Movie</div>
+    <div id="animDrawWrap"><canvas id="animDrawSurface" width="480" height="360"></canvas></div>
+    <div class="colorRow" id="animColorRow"></div>
+    <div class="sizeRow" id="animSizeRow"></div>
+    <button class="btn small" id="animClearBtn">🧹 Clear Drawing</button>
+    <button class="btn" id="animAddFrameBtn">➕ Add Frame</button>
+    <div id="animFrameFilmstrip"></div>
+    <div>
+      <button class="btn small" id="animSpeedBtn">🚶 Normal</button>
+      <button class="btn small" id="animPreviewBtn">▶️ Preview</button>
+    </div>
+    <div id="animStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
+    <div>
+      <button class="btn" id="animCancelBtn">✖ Cancel</button>
+      <button class="btn" id="animDoneBtn" disabled>✅ Done — Add to Movie</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="scenesOverlay">
+    <div class="bigTitle">🎬 Combine Scenes</div>
+    <div id="scenesStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
+    <div id="scenesMovieList"></div>
+    <div>
+      <button class="btn" id="scenesCancelBtn">✖ Cancel</button>
+      <button class="btn" id="scenesCombineBtn">✅ Combine</button>
+    </div>
+  </div>
+
   <div id="watchScreen">
     <button id="watchExitBtn">✖</button>
     <video id="watchVideo" playsinline></video>
@@ -284,6 +345,14 @@
       { id: "laugh", emoji: "😂", label: "Giggle" }
     ];
     var SPEED_OPTIONS = [0.5, 1, 1.5, 2];
+    var ANIM_COLORS = ["#000000", "#e63946", "#f77f00", "#fcbf49", "#2a9d34", "#2196f3", "#8a5cff", "#ffffff"];
+    var ANIM_SIZES = [{ label: "Small", w: 3 }, { label: "Medium", w: 8 }, { label: "Big", w: 16 }];
+    var ANIM_SPEED_OPTIONS = [
+      { label: "🐢 Slow", ms: 600 },
+      { label: "🚶 Normal", ms: 350 },
+      { label: "🐇 Fast", ms: 180 }
+    ];
+    var ANIM_CANVAS_W = 480, ANIM_CANVAS_H = 360;
 
     function uid(prefix) { return prefix + "_" + Date.now() + "_" + Math.floor(Math.random() * 100000); }
     function removeById(arr, id) {
@@ -1189,8 +1258,270 @@
       return record;
     }
 
+    // ---------------- new-movie choice ----------------
+    function openNewMovieChoice() { document.getElementById("newMovieChoiceOverlay").style.display = "flex"; }
+    function closeNewMovieChoice() { document.getElementById("newMovieChoiceOverlay").style.display = "none"; }
+
+    // ---------------- animation movie (draw frames, render to a real video clip) ----------------
+    var animFrames = [];
+    var animColor = ANIM_COLORS[0];
+    var animBrushSize = ANIM_SIZES[1].w;
+    var animSpeedIndex = 1;
+    var animCtx = null;
+    var animDrawing = false;
+    var animLastX = 0, animLastY = 0;
+    var animPreviewTimer = null;
+
+    function initAnimCanvas() {
+      var canvas = document.getElementById("animDrawSurface");
+      animCtx = canvas.getContext("2d");
+      canvas.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        animDrawing = true;
+        var p = animCanvasPoint(e);
+        animLastX = p.x; animLastY = p.y;
+        animCtx.fillStyle = animColor;
+        animCtx.beginPath();
+        animCtx.arc(p.x, p.y, animBrushSize / 2, 0, Math.PI * 2);
+        animCtx.fill();
+        if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      });
+      canvas.addEventListener("pointermove", function (e) {
+        if (!animDrawing) return;
+        var p = animCanvasPoint(e);
+        animCtx.strokeStyle = animColor;
+        animCtx.lineWidth = animBrushSize;
+        animCtx.lineCap = "round";
+        animCtx.lineJoin = "round";
+        animCtx.beginPath();
+        animCtx.moveTo(animLastX, animLastY);
+        animCtx.lineTo(p.x, p.y);
+        animCtx.stroke();
+        animLastX = p.x; animLastY = p.y;
+      });
+      canvas.addEventListener("pointerup", function () { animDrawing = false; });
+      canvas.addEventListener("pointerleave", function () { animDrawing = false; });
+    }
+    function animCanvasPoint(e) {
+      var canvas = document.getElementById("animDrawSurface");
+      var rect = canvas.getBoundingClientRect();
+      var scaleX = canvas.width / (rect.width || canvas.width);
+      var scaleY = canvas.height / (rect.height || canvas.height);
+      return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    }
+    function clearAnimCanvas() {
+      animCtx.fillStyle = "#ffffff";
+      animCtx.fillRect(0, 0, ANIM_CANVAS_W, ANIM_CANVAS_H);
+    }
+    function renderAnimColorRow() {
+      var row = document.getElementById("animColorRow");
+      row.innerHTML = "";
+      ANIM_COLORS.forEach(function (c) {
+        var b = document.createElement("button");
+        b.className = "colorSwatch" + (c === animColor ? " selected" : "");
+        b.style.background = c;
+        if (c === "#ffffff") b.style.borderColor = "#999";
+        b.addEventListener("click", function () { animColor = c; renderAnimColorRow(); });
+        row.appendChild(b);
+      });
+    }
+    function renderAnimSizeRow() {
+      var row = document.getElementById("animSizeRow");
+      row.innerHTML = "";
+      ANIM_SIZES.forEach(function (s) {
+        var b = document.createElement("button");
+        b.className = "sizeBtn" + (s.w === animBrushSize ? " selected" : "");
+        b.textContent = s.label;
+        b.addEventListener("click", function () { animBrushSize = s.w; renderAnimSizeRow(); });
+        row.appendChild(b);
+      });
+    }
+    function renderAnimFrameFilmstrip() {
+      var wrap = document.getElementById("animFrameFilmstrip");
+      wrap.innerHTML = "";
+      animFrames.forEach(function (dataUrl, idx) {
+        var thumb = document.createElement("button");
+        thumb.className = "animFrameThumb";
+        thumb.title = "Tap to delete this frame";
+        var img = document.createElement("img");
+        img.src = dataUrl;
+        thumb.appendChild(img);
+        thumb.addEventListener("click", function () { animFrames.splice(idx, 1); renderAnimFrameFilmstrip(); });
+        wrap.appendChild(thumb);
+      });
+      document.getElementById("animDoneBtn").disabled = animFrames.length === 0;
+    }
+    function addAnimFrame() {
+      var canvas = document.getElementById("animDrawSurface");
+      animFrames.push(canvas.toDataURL("image/png"));
+      clearAnimCanvas();
+      renderAnimFrameFilmstrip();
+    }
+    function updateAnimSpeedBtn() {
+      document.getElementById("animSpeedBtn").textContent = ANIM_SPEED_OPTIONS[animSpeedIndex].label;
+    }
+    function previewAnimation() {
+      if (!animFrames.length || animPreviewTimer) return;
+      var savedSnapshot = document.getElementById("animDrawSurface").toDataURL("image/png");
+      var ms = ANIM_SPEED_OPTIONS[animSpeedIndex].ms;
+      var i = 0;
+      document.getElementById("animPreviewBtn").disabled = true;
+      function showFrame(src) {
+        var img = new Image();
+        img.onload = function () { animCtx.drawImage(img, 0, 0, ANIM_CANVAS_W, ANIM_CANVAS_H); };
+        img.src = src;
+      }
+      showFrame(animFrames[i]);
+      animPreviewTimer = setInterval(function () {
+        i++;
+        if (i >= animFrames.length) {
+          clearInterval(animPreviewTimer);
+          animPreviewTimer = null;
+          showFrame(savedSnapshot);
+          document.getElementById("animPreviewBtn").disabled = false;
+          return;
+        }
+        showFrame(animFrames[i]);
+      }, ms);
+    }
+    function renderFramesToVideo(frames, frameDurationMs) {
+      return new Promise(function (resolve) {
+        var canvas = document.createElement("canvas");
+        canvas.width = ANIM_CANVAS_W; canvas.height = ANIM_CANVAS_H;
+        var ctx = canvas.getContext("2d");
+        if (!canvas.captureStream || !window.MediaRecorder) { resolve(null); return; }
+        var stream = canvas.captureStream(30);
+        var mimeType = pickRecordingMimeType("camera");
+        var recorder;
+        try { recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream); }
+        catch (e) { resolve(null); return; }
+        var chunks = [];
+        recorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          resolve(new Blob(chunks, { type: mimeType || "video/webm" }));
+        };
+        recorder.onerror = function () { resolve(null); };
+        var images = frames.map(function (src) { var img = new Image(); img.src = src; return img; });
+        recorder.start();
+        var idx = 0;
+        function drawNext() {
+          if (idx >= images.length) { recorder.stop(); return; }
+          var img = images[idx];
+          function draw() {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            idx++;
+            setTimeout(drawNext, frameDurationMs);
+          }
+          if (img.complete) draw(); else img.onload = draw;
+        }
+        drawNext();
+      });
+    }
+    function openAnimationTool() {
+      animFrames = [];
+      animColor = ANIM_COLORS[0];
+      animBrushSize = ANIM_SIZES[1].w;
+      animSpeedIndex = 1;
+      if (!animCtx) initAnimCanvas();
+      clearAnimCanvas();
+      renderAnimColorRow();
+      renderAnimSizeRow();
+      renderAnimFrameFilmstrip();
+      updateAnimSpeedBtn();
+      document.getElementById("animStatus").textContent = "";
+      document.getElementById("animationOverlay").style.display = "flex";
+    }
+    function closeAnimationTool() {
+      if (animPreviewTimer) { clearInterval(animPreviewTimer); animPreviewTimer = null; }
+      document.getElementById("animationOverlay").style.display = "none";
+    }
+    function finishAnimation() {
+      if (!animFrames.length) return;
+      if (!document.getElementById("animDrawSurface").captureStream || !window.MediaRecorder) {
+        document.getElementById("animStatus").textContent = "😅 Animation isn't supported in this browser.";
+        return;
+      }
+      document.getElementById("animStatus").textContent = "🎬 Making your animation...";
+      document.getElementById("animDoneBtn").disabled = true;
+      renderFramesToVideo(animFrames, ANIM_SPEED_OPTIONS[animSpeedIndex].ms).then(function (blob) {
+        document.getElementById("animStatus").textContent = "";
+        if (!blob) {
+          document.getElementById("animStatus").textContent = "😅 Something went wrong making the animation.";
+          document.getElementById("animDoneBtn").disabled = false;
+          return;
+        }
+        closeAnimationTool();
+        if (!draftProject) openEditor();
+        addClipFromFile(blob);
+      });
+    }
+
+    // ---------------- scenes (combine existing movies into one) ----------------
+    function openScenesPicker() {
+      var list = document.getElementById("scenesMovieList");
+      list.innerHTML = "";
+      document.getElementById("scenesStatus").textContent = movies.length < 2 ? "You need at least 2 movies made first!" : "";
+      movies.slice().sort(function (a, b) { return b.createdAt - a.createdAt; }).forEach(function (m) {
+        var row = document.createElement("label");
+        row.className = "catCheckboxRow";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = m.id;
+        row.appendChild(cb);
+        var span = document.createElement("span");
+        span.textContent = m.title;
+        row.appendChild(span);
+        list.appendChild(row);
+      });
+      document.getElementById("scenesOverlay").style.display = "flex";
+    }
+    function closeScenesPicker() { document.getElementById("scenesOverlay").style.display = "none"; }
+    function confirmScenes() {
+      var checked = Array.from(document.getElementById("scenesMovieList").querySelectorAll("input:checked")).map(function (cb) { return cb.value; });
+      if (checked.length < 2) {
+        document.getElementById("scenesStatus").textContent = "Pick at least 2 movies to combine!";
+        return;
+      }
+      closeScenesPicker();
+      openEditor();
+      checked.forEach(function (movieId) {
+        var m = findById(movies, movieId);
+        if (!m) return;
+        m.clips.forEach(function (c) {
+          var objectUrl = c.blob ? URL.createObjectURL(c.blob) : c.objectUrl;
+          draftProject.clips.push({
+            id: uid("clip"), blob: c.blob, objectUrl: objectUrl,
+            duration: c.duration, trimStart: c.trimStart, trimEnd: c.trimEnd,
+            speed: c.speed, volume: c.volume, thumbnail: c.thumbnail,
+            soundEffects: c.soundEffects.map(function (sfx) { return { id: uid("sfx"), time: sfx.time, effectId: sfx.effectId }; })
+          });
+        });
+      });
+      renderEditor();
+    }
+
     // ---------------- init / wiring ----------------
-    document.getElementById("newMovieBtn").addEventListener("click", openEditor);
+    document.getElementById("newMovieBtn").addEventListener("click", openNewMovieChoice);
+    document.getElementById("choiceFilmBtn").addEventListener("click", function () { closeNewMovieChoice(); openEditor(); });
+    document.getElementById("choiceAnimationBtn").addEventListener("click", function () { closeNewMovieChoice(); openAnimationTool(); });
+    document.getElementById("choiceScenesBtn").addEventListener("click", function () { closeNewMovieChoice(); openScenesPicker(); });
+    document.getElementById("newMovieChoiceCancelBtn").addEventListener("click", closeNewMovieChoice);
+
+    document.getElementById("animClearBtn").addEventListener("click", clearAnimCanvas);
+    document.getElementById("animAddFrameBtn").addEventListener("click", addAnimFrame);
+    document.getElementById("animSpeedBtn").addEventListener("click", function () {
+      animSpeedIndex = (animSpeedIndex + 1) % ANIM_SPEED_OPTIONS.length;
+      updateAnimSpeedBtn();
+    });
+    document.getElementById("animPreviewBtn").addEventListener("click", previewAnimation);
+    document.getElementById("animCancelBtn").addEventListener("click", closeAnimationTool);
+    document.getElementById("animDoneBtn").addEventListener("click", finishAnimation);
+
+    document.getElementById("scenesCancelBtn").addEventListener("click", closeScenesPicker);
+    document.getElementById("scenesCombineBtn").addEventListener("click", confirmScenes);
     document.getElementById("editorCancelBtn").addEventListener("click", closeEditor);
     document.getElementById("editorSaveBtn").addEventListener("click", openSaveMovieOverlay);
     document.getElementById("addClipBtn").addEventListener("click", function () { document.getElementById("clipFileInput").click(); });
