@@ -247,10 +247,13 @@
     <button class="btn small" id="animClearBtn">🧹 Clear Drawing</button>
     <button class="btn" id="animAddFrameBtn">➕ Add Frame</button>
     <div id="animFrameFilmstrip"></div>
-    <div>
-      <button class="btn small" id="animSpeedBtn">🚶 Normal</button>
-      <button class="btn small" id="animPreviewBtn">▶️ Preview</button>
+    <div class="volumeRow" style="width:100%; max-width:340px;">
+      <span>🐇</span>
+      <input type="range" id="animSpeedSlider" min="20" max="300" step="10">
+      <span>🐢</span>
+      <span id="animSpeedLabel" style="min-width:60px;">150ms</span>
     </div>
+    <button class="btn small" id="animPreviewBtn">▶️ Preview</button>
     <div id="animStatus" style="font-size:0.85rem; min-height:1.3em; opacity:0.9;"></div>
     <div>
       <button class="btn" id="animCancelBtn">✖ Cancel</button>
@@ -347,11 +350,7 @@
     var SPEED_OPTIONS = [0.5, 1, 1.5, 2];
     var ANIM_COLORS = ["#000000", "#e63946", "#f77f00", "#fcbf49", "#2a9d34", "#2196f3", "#8a5cff", "#ffffff"];
     var ANIM_SIZES = [{ label: "Small", w: 3 }, { label: "Medium", w: 8 }, { label: "Big", w: 16 }];
-    var ANIM_SPEED_OPTIONS = [
-      { label: "🐢 Slow", ms: 600 },
-      { label: "🚶 Normal", ms: 350 },
-      { label: "🐇 Fast", ms: 180 }
-    ];
+    var ANIM_SPEED_MIN = 20, ANIM_SPEED_MAX = 300, ANIM_SPEED_DEFAULT = 150;
     var ANIM_CANVAS_W = 480, ANIM_CANVAS_H = 360;
 
     function uid(prefix) { return prefix + "_" + Date.now() + "_" + Math.floor(Math.random() * 100000); }
@@ -1266,7 +1265,7 @@
     var animFrames = [];
     var animColor = ANIM_COLORS[0];
     var animBrushSize = ANIM_SIZES[1].w;
-    var animSpeedIndex = 1;
+    var animSpeedMs = ANIM_SPEED_DEFAULT;
     var animCtx = null;
     var animDrawing = false;
     var animLastX = 0, animLastY = 0;
@@ -1357,13 +1356,13 @@
       clearAnimCanvas();
       renderAnimFrameFilmstrip();
     }
-    function updateAnimSpeedBtn() {
-      document.getElementById("animSpeedBtn").textContent = ANIM_SPEED_OPTIONS[animSpeedIndex].label;
+    function updateAnimSpeedLabel() {
+      document.getElementById("animSpeedLabel").textContent = animSpeedMs + "ms";
     }
     function previewAnimation() {
       if (!animFrames.length || animPreviewTimer) return;
       var savedSnapshot = document.getElementById("animDrawSurface").toDataURL("image/png");
-      var ms = ANIM_SPEED_OPTIONS[animSpeedIndex].ms;
+      var ms = animSpeedMs;
       var i = 0;
       document.getElementById("animPreviewBtn").disabled = true;
       function showFrame(src) {
@@ -1424,13 +1423,14 @@
       animFrames = [];
       animColor = ANIM_COLORS[0];
       animBrushSize = ANIM_SIZES[1].w;
-      animSpeedIndex = 1;
+      animSpeedMs = ANIM_SPEED_DEFAULT;
       if (!animCtx) initAnimCanvas();
       clearAnimCanvas();
       renderAnimColorRow();
       renderAnimSizeRow();
       renderAnimFrameFilmstrip();
-      updateAnimSpeedBtn();
+      document.getElementById("animSpeedSlider").value = animSpeedMs;
+      updateAnimSpeedLabel();
       document.getElementById("animStatus").textContent = "";
       document.getElementById("animationOverlay").style.display = "flex";
     }
@@ -1446,7 +1446,7 @@
       }
       document.getElementById("animStatus").textContent = "🎬 Making your animation...";
       document.getElementById("animDoneBtn").disabled = true;
-      renderFramesToVideo(animFrames, ANIM_SPEED_OPTIONS[animSpeedIndex].ms).then(function (blob) {
+      renderFramesToVideo(animFrames, animSpeedMs).then(function (blob) {
         document.getElementById("animStatus").textContent = "";
         if (!blob) {
           document.getElementById("animStatus").textContent = "😅 Something went wrong making the animation.";
@@ -1512,9 +1512,9 @@
 
     document.getElementById("animClearBtn").addEventListener("click", clearAnimCanvas);
     document.getElementById("animAddFrameBtn").addEventListener("click", addAnimFrame);
-    document.getElementById("animSpeedBtn").addEventListener("click", function () {
-      animSpeedIndex = (animSpeedIndex + 1) % ANIM_SPEED_OPTIONS.length;
-      updateAnimSpeedBtn();
+    document.getElementById("animSpeedSlider").addEventListener("input", function (e) {
+      animSpeedMs = clampNum(parseInt(e.target.value, 10) || ANIM_SPEED_DEFAULT, ANIM_SPEED_MIN, ANIM_SPEED_MAX);
+      updateAnimSpeedLabel();
     });
     document.getElementById("animPreviewBtn").addEventListener("click", previewAnimation);
     document.getElementById("animCancelBtn").addEventListener("click", closeAnimationTool);
