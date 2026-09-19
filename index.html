@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MovieBox!</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+    body {
+      font-family: "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif;
+      min-height: 100vh;
+      color: #fff;
+      background: linear-gradient(120deg, #0d1b3e, #4b2e83, #a23fc9);
+      background-size: 300% 300%;
+      animation: flow 16s ease infinite;
+      padding: 14px 12px 40px;
+    }
+    @keyframes flow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .btn {
+      font-family: inherit; font-weight: bold; font-size: 0.95rem; color: #2a1650;
+      background: #ffd76b; border: 3px solid #fff; border-radius: 16px;
+      padding: 9px 16px; margin: 4px; cursor: pointer;
+      box-shadow: 0 5px 0 rgba(0,0,0,0.3);
+    }
+    .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,0.3); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn.small { font-size: 0.8rem; padding: 6px 10px; }
+    .btn.danger { background: #ff8080; }
+    .btn.wide { display: block; width: 100%; max-width: 400px; margin: 10px auto 0; font-size: 1.05rem; }
+
+    /* ---------------- library ---------------- */
+    #libraryScreen { max-width: 480px; margin: 0 auto; }
+    #libTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    #libTopBar h1 { font-size: clamp(1.3rem, 6vw, 1.8rem); text-shadow: 3px 3px 0 rgba(0,0,0,0.3); }
+    #libTopBarBtns { display: flex; gap: 4px; }
+    #emptyLibraryMsg { opacity: 0.85; font-size: 0.9rem; margin-top: 30px; padding: 0 10px; }
+
+    .catRow { margin-bottom: 18px; text-align: left; }
+    .catRowHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding: 0 2px; }
+    .catRowTitle { font-weight: bold; font-size: 1rem; }
+    .catRowScroller { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; }
+    .movieCard { flex-shrink: 0; width: 110px; position: relative; cursor: pointer; }
+    .movieCardThumb {
+      width: 110px; height: 78px; border-radius: 10px; border: 3px solid #fff;
+      background: #222 center/cover no-repeat; display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; overflow: hidden;
+    }
+    .movieCardTitle { font-size: 0.75rem; font-weight: bold; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .movieCardStar {
+      position: absolute; top: 4px; left: 4px; background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
+      width: 24px; height: 24px; font-size: 0.85rem; cursor: pointer; color: #ffd76b;
+    }
+    .movieCardMenuBtn {
+      position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
+      width: 24px; height: 24px; font-size: 0.85rem; cursor: pointer; color: #fff;
+    }
+
+    /* ---------------- overlays ---------------- */
+    .overlay {
+      display: none; position: fixed; inset: 0; z-index: 60;
+      align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+      background: rgba(15, 8, 30, 0.94); padding: 16px; overflow-y: auto; text-align: center;
+    }
+    .overlay .bigTitle { font-size: 1.2rem; font-weight: bold; }
+    #movieMenuOverlay .btn, #categoryManageOverlay .btn { width: 100%; max-width: 280px; }
+    #catCheckboxList { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px; text-align: left; }
+    .catCheckboxRow { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 10px; }
+    .catCheckboxRow input { width: 18px; height: 18px; }
+    #newMovieTitleInput, #newCategoryInput, #manageNewCategoryInput, #renameMovieInput {
+      font-family: inherit; font-size: 1.05rem; font-weight: bold; text-align: center;
+      padding: 9px; border-radius: 12px; border: 3px solid #fff; width: 90%; max-width: 300px;
+      background: rgba(255,255,255,0.95); color: #2a1650;
+    }
+    #manageCategoryList { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 300px; }
+    .manageCategoryRow { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 10px; }
+    .manageCategoryRow span { flex: 1; text-align: left; font-weight: bold; }
+    .manageCategoryRow button { background: none; border: none; color: #ffb0b0; font-size: 1.1rem; cursor: pointer; }
+    #sfxPaletteGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; max-width: 340px; }
+    .sfxBtn {
+      font-family: inherit; font-weight: bold; color: #fff; background: rgba(255,255,255,0.14);
+      border: 3px solid #fff; border-radius: 14px; padding: 12px 4px; cursor: pointer; font-size: 0.8rem;
+    }
+    .sfxBtn .sfxEmoji { font-size: 1.6rem; display: block; margin-bottom: 2px; }
+
+    /* ---------------- editor ---------------- */
+    #editorScreen { max-width: 480px; margin: 0 auto; display: none; }
+    #editorTopBar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    #previewWrap {
+      width: 100%; aspect-ratio: 16/9; background: #000; border: 4px solid #fff; border-radius: 14px;
+      overflow: hidden; position: relative; margin-bottom: 6px;
+    }
+    #previewVideo { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    #previewEmptyMsg {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; opacity: 0.8; padding: 20px; text-align: center;
+    }
+    #previewControls { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
+    #editorClipList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+    .clipRow { background: rgba(255,255,255,0.1); border-radius: 14px; padding: 8px; text-align: left; }
+    .clipRowTop { display: flex; gap: 8px; align-items: center; }
+    .clipThumb {
+      width: 56px; height: 40px; border-radius: 8px; background: #222 center/cover no-repeat;
+      flex-shrink: 0; border: 2px solid #fff;
+    }
+    .clipRowInfo { flex: 1; font-size: 0.75rem; }
+    .clipRowBtns { display: flex; gap: 3px; flex-wrap: wrap; }
+    .clipRowBtns button {
+      font-family: inherit; font-weight: bold; font-size: 0.68rem; color: #fff;
+      background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 8px; padding: 4px 6px; cursor: pointer;
+    }
+    .clipTrimBar {
+      position: relative; height: 28px; background: rgba(255,255,255,0.15); border-radius: 8px;
+      margin-top: 8px; margin-bottom: 4px;
+    }
+    .trimActiveRange { position: absolute; top: 0; bottom: 0; background: rgba(255,215,107,0.4); }
+    .trimHandle {
+      position: absolute; top: -3px; width: 14px; height: 34px; background: #ffd76b; border: 2px solid #fff;
+      border-radius: 5px; cursor: ew-resize; transform: translateX(-50%);
+    }
+    .sfxMarker {
+      position: absolute; top: -14px; width: 18px; height: 18px; font-size: 0.8rem; text-align: center;
+      transform: translateX(-50%); cursor: pointer; line-height: 18px;
+    }
+    .volumeRow { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 0.7rem; }
+    .volumeRow input[type="range"] { flex: 1; }
+
+    /* ---------------- watch ---------------- */
+    #watchScreen {
+      display: none; position: fixed; inset: 0; z-index: 100; background: #000;
+      flex-direction: column; align-items: center; justify-content: center;
+    }
+    #watchVideo { width: 100%; max-height: 100%; }
+    #watchExitBtn {
+      position: fixed; top: 14px; right: 14px; z-index: 10;
+      background: rgba(255,255,255,0.2); color: #fff; border: 3px solid #fff; border-radius: 50%;
+      width: 40px; height: 40px; font-size: 1.1rem; cursor: pointer;
+    }
+    #watchInfoBar { position: fixed; bottom: 16px; left: 0; right: 0; text-align: center; font-size: 0.85rem; opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div id="libraryScreen">
+    <div id="libTopBar">
+      <h1>🎬 MovieBox</h1>
+      <div id="libTopBarBtns">
+        <button class="btn small" id="manageCategoriesBtn">🗂️</button>
+        <button class="btn small" id="newMovieBtn">➕ New Movie</button>
+      </div>
+    </div>
+    <div id="catRows"></div>
+    <div id="emptyLibraryMsg" style="display:none;">No movies yet! Tap "➕ New Movie" to make your first one. 🎥</div>
+  </div>
+
+  <div id="editorScreen">
+    <div id="editorTopBar">
+      <button class="btn small" id="editorCancelBtn">✖ Cancel</button>
+      <div style="font-weight:bold;">🎬 Make a Movie</div>
+      <button class="btn small" id="editorSaveBtn">💾 Save</button>
+    </div>
+    <div id="previewWrap">
+      <video id="previewVideo" playsinline muted></video>
+      <div id="previewEmptyMsg">➕ Add a clip below to get started!</div>
+    </div>
+    <div id="previewControls">
+      <button class="btn small" id="previewPlayBtn">▶️ Play</button>
+      <button class="btn small" id="addSfxBtn" disabled>🔊 Add Sound Effect Here</button>
+    </div>
+    <div id="editorClipList"></div>
+    <button class="btn wide" id="addClipBtn">➕ Add Clip</button>
+  </div>
+  <input type="file" id="clipFileInput" accept="video/*" style="display:none;">
+
+  <div id="watchScreen">
+    <button id="watchExitBtn">✖</button>
+    <video id="watchVideo" playsinline></video>
+    <div id="watchInfoBar"></div>
+  </div>
+
+  <div class="overlay" id="sfxPaletteOverlay">
+    <div class="bigTitle">🔊 Pick a Sound Effect</div>
+    <div id="sfxPaletteGrid"></div>
+    <button class="btn" id="sfxPaletteCancelBtn">✖ Cancel</button>
+  </div>
+
+  <div class="overlay" id="saveMovieOverlay">
+    <div class="bigTitle">💾 Save Your Movie</div>
+    <input type="text" id="newMovieTitleInput" maxlength="30" placeholder="My Movie">
+    <div class="bigTitle" style="font-size:0.95rem;">Put it in categories:</div>
+    <div id="catCheckboxList"></div>
+    <input type="text" id="newCategoryInput" maxlength="20" placeholder="+ New category name">
+    <button class="btn small" id="addInlineCategoryBtn">➕ Add Category</button>
+    <div>
+      <button class="btn" id="saveMovieCancelBtn">✖ Cancel</button>
+      <button class="btn" id="saveMovieConfirmBtn">✅ Save Movie</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="movieMenuOverlay">
+    <div class="bigTitle" id="movieMenuTitle"></div>
+    <button class="btn" id="menuFavoriteBtn">⭐ Toggle Favorite</button>
+    <button class="btn" id="menuRenameBtn">✏️ Rename</button>
+    <button class="btn" id="menuCategoriesBtn">🗂️ Edit Categories</button>
+    <button class="btn danger" id="menuDeleteBtn">🗑️ Delete Movie</button>
+    <button class="btn" id="movieMenuCloseBtn">✖ Close</button>
+  </div>
+
+  <div class="overlay" id="renameOverlay">
+    <div class="bigTitle">✏️ Rename Movie</div>
+    <input type="text" id="renameMovieInput" maxlength="30">
+    <div>
+      <button class="btn" id="renameCancelBtn">✖ Cancel</button>
+      <button class="btn" id="renameSaveBtn">✅ Save</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="editCategoriesOverlay">
+    <div class="bigTitle">🗂️ Edit Categories</div>
+    <div id="editCatCheckboxList" class="catCheckboxList" style="display:flex;flex-direction:column;gap:6px;width:100%;max-width:300px;"></div>
+    <div>
+      <button class="btn" id="editCatCancelBtn">✖ Cancel</button>
+      <button class="btn" id="editCatSaveBtn">✅ Save</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="categoryManageOverlay">
+    <div class="bigTitle">🗂️ Manage Categories</div>
+    <div id="manageCategoryList"></div>
+    <input type="text" id="manageNewCategoryInput" maxlength="20" placeholder="+ New category name">
+    <button class="btn small" id="manageAddCategoryBtn">➕ Add</button>
+    <button class="btn" id="categoryManageCloseBtn">✖ Close</button>
+  </div>
+
+  <script>
+    var DB_NAME = "movieBoxDB";
+    var DB_VERSION = 1;
+    var MAX_NEW_COUNT = 8;
+
+    var SOUND_EFFECTS = [
+      { id: "boing", emoji: "🌀", label: "Boing" },
+      { id: "whoosh", emoji: "💨", label: "Whoosh" },
+      { id: "drum", emoji: "🥁", label: "Drum" },
+      { id: "ding", emoji: "🔔", label: "Ding" },
+      { id: "horn", emoji: "📯", label: "Horn" },
+      { id: "pop", emoji: "🎈", label: "Pop" },
+      { id: "zap", emoji: "⚡", label: "Zap" },
+      { id: "laugh", emoji: "😂", label: "Giggle" }
+    ];
+    var SPEED_OPTIONS = [0.5, 1, 1.5, 2];
+
+    function uid(prefix) { return prefix + "_" + Date.now() + "_" + Math.floor(Math.random() * 100000); }
+    function removeById(arr, id) {
+      for (var i = 0; i < arr.length; i++) { if (arr[i].id === id) { arr.splice(i, 1); return; } }
+    }
+    function findById(arr, id) {
+      for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i];
+      return null;
+    }
+    function clampNum(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+    function formatTime(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+      return m + ":" + (s < 10 ? "0" : "") + s;
+    }
+
+    // ---------------- IndexedDB wrapper ----------------
+    var dbPromise = null;
+    function getDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise(function (resolve, reject) {
+        var req = window.indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = function (e) {
+          var db = e.target.result;
+          if (!db.objectStoreNames.contains("movies")) db.createObjectStore("movies", { keyPath: "id" });
+          if (!db.objectStoreNames.contains("categories")) db.createObjectStore("categories", { keyPath: "id" });
+        };
+        req.onsuccess = function (e) { resolve(e.target.result); };
+        req.onerror = function (e) { reject(e); };
+      });
+      return dbPromise;
+    }
+    function dbPut(storeName, obj) {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(storeName, "readwrite");
+          tx.objectStore(storeName).put(obj);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function (e) { reject(e); };
+        });
+      });
+    }
+    function dbGetAll(storeName) {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(storeName, "readonly");
+          var req = tx.objectStore(storeName).getAll();
+          req.onsuccess = function () { resolve(req.result || []); };
+          req.onerror = function (e) { reject(e); };
+        });
+      });
+    }
+    function dbDelete(storeName, id) {
+      return getDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction(storeName, "readwrite");
+          tx.objectStore(storeName).delete(id);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function (e) { reject(e); };
+        });
+      });
+    }
+
+    // ---------------- procedural sound effects (Web Audio, no audio files) ----------------
+    var audioCtx = null;
+    function getAudioCtx() {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioCtx = new AC();
+      }
+      return audioCtx;
+    }
+    function tone(ctx, t, opts) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = opts.type || "sine";
+      osc.frequency.setValueAtTime(opts.freqStart, t);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.freqEnd), t + opts.dur);
+      gain.gain.setValueAtTime(opts.gain || 0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + opts.dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); osc.stop(t + opts.dur);
+    }
+    function noiseBurst(ctx, t, dur, filterFreq) {
+      var bufferSize = Math.floor(ctx.sampleRate * dur);
+      var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      var data = buffer.getChannelData(0);
+      for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+      var noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      var filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = filterFreq || 800;
+      var gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      noise.start(t); noise.stop(t + dur);
+    }
+    var SFX_PLAYERS = {
+      boing: function (ctx, t) { tone(ctx, t, { type: "sine", freqStart: 600, freqEnd: 80, dur: 0.4, gain: 0.35 }); },
+      whoosh: function (ctx, t) { noiseBurst(ctx, t, 0.35, 1500); },
+      drum: function (ctx, t) { noiseBurst(ctx, t, 0.18, 150); },
+      ding: function (ctx, t) { tone(ctx, t, { type: "sine", freqStart: 1400, freqEnd: 1400, dur: 0.5, gain: 0.25 }); },
+      horn: function (ctx, t) { tone(ctx, t, { type: "sawtooth", freqStart: 220, freqEnd: 220, dur: 0.5, gain: 0.25 }); },
+      pop: function (ctx, t) { tone(ctx, t, { type: "sine", freqStart: 900, freqEnd: 200, dur: 0.09, gain: 0.4 }); },
+      zap: function (ctx, t) { tone(ctx, t, { type: "sawtooth", freqStart: 1200, freqEnd: 150, dur: 0.15, gain: 0.3 }); },
+      laugh: function (ctx, t) {
+        [0, 0.12, 0.24].forEach(function (off) { tone(ctx, t + off, { type: "square", freqStart: 500, freqEnd: 700, dur: 0.1, gain: 0.2 }); });
+      }
+    };
+    function playSoundEffect(effectId) {
+      var ctx = getAudioCtx();
+      if (!ctx) return;
+      var fn = SFX_PLAYERS[effectId];
+      if (fn) fn(ctx, ctx.currentTime);
+    }
+
+    // ---------------- state ----------------
+    var movies = [];
+    var categories = [];
+    var draftProject = null; // { id, title, clips: [...], categoryIds: [], isFavorite }
+    var editingMovieId = null; // menu-target movie id
+    var sfxTargetClipIndex = -1;
+
+    function newDraftProject() {
+      return { id: uid("movie"), title: "", clips: [], categoryIds: [], isFavorite: false, createdAt: Date.now() };
+    }
+    function newClip(file, objectUrl) {
+      return {
+        id: uid("clip"), blob: file, objectUrl: objectUrl,
+        duration: 0, trimStart: 0, trimEnd: 0, speed: 1, volume: 1, soundEffects: []
+      };
+    }
+
+    // ---------------- library rendering ----------------
+    function buildDisplayCategories() {
+      var sorted = movies.slice().sort(function (a, b) { return b.createdAt - a.createdAt; });
+      var rows = [];
+      rows.push({ id: "new", name: "🆕 New", movies: sorted.slice(0, MAX_NEW_COUNT) });
+      rows.push({ id: "favorites", name: "⭐ Favorites", movies: movies.filter(function (m) { return m.isFavorite; }) });
+      categories.forEach(function (c) {
+        rows.push({ id: c.id, name: "🗂️ " + c.name, movies: movies.filter(function (m) { return m.categoryIds.indexOf(c.id) !== -1; }) });
+      });
+      return rows.filter(function (r) { return r.movies.length > 0; });
+    }
+    function renderLibrary() {
+      var wrap = document.getElementById("catRows");
+      wrap.innerHTML = "";
+      var rows = buildDisplayCategories();
+      document.getElementById("emptyLibraryMsg").style.display = movies.length === 0 ? "block" : "none";
+      rows.forEach(function (row) {
+        var rowEl = document.createElement("div");
+        rowEl.className = "catRow";
+        var header = document.createElement("div");
+        header.className = "catRowHeader";
+        var title = document.createElement("div");
+        title.className = "catRowTitle";
+        title.textContent = row.name;
+        header.appendChild(title);
+        rowEl.appendChild(header);
+        var scroller = document.createElement("div");
+        scroller.className = "catRowScroller";
+        row.movies.forEach(function (m) { scroller.appendChild(makeMovieCard(m)); });
+        rowEl.appendChild(scroller);
+        wrap.appendChild(rowEl);
+      });
+    }
+    function makeMovieCard(movie) {
+      var card = document.createElement("div");
+      card.className = "movieCard";
+      var thumb = document.createElement("div");
+      thumb.className = "movieCardThumb";
+      if (movie.thumbnail) thumb.style.backgroundImage = "url('" + movie.thumbnail + "')";
+      else thumb.textContent = "🎬";
+      card.appendChild(thumb);
+      var title = document.createElement("div");
+      title.className = "movieCardTitle";
+      title.textContent = movie.title;
+      card.appendChild(title);
+      var star = document.createElement("button");
+      star.className = "movieCardStar";
+      star.textContent = movie.isFavorite ? "⭐" : "☆";
+      star.addEventListener("click", function (e) { e.stopPropagation(); toggleFavorite(movie.id); });
+      card.appendChild(star);
+      var menuBtn = document.createElement("button");
+      menuBtn.className = "movieCardMenuBtn";
+      menuBtn.textContent = "⋮";
+      menuBtn.addEventListener("click", function (e) { e.stopPropagation(); openMovieMenu(movie.id); });
+      card.appendChild(menuBtn);
+      card.addEventListener("click", function () { watchMovie(movie.id); });
+      return card;
+    }
+    function toggleFavorite(movieId) {
+      var m = findById(movies, movieId);
+      if (!m) return;
+      m.isFavorite = !m.isFavorite;
+      persistMovie(m);
+      renderLibrary();
+    }
+    function persistMovie(movie) { return dbPut("movies", movie); }
+
+    // ---------------- movie menu ----------------
+    function openMovieMenu(movieId) {
+      editingMovieId = movieId;
+      var m = findById(movies, movieId);
+      if (!m) return;
+      document.getElementById("movieMenuTitle").textContent = m.title;
+      document.getElementById("movieMenuOverlay").style.display = "flex";
+    }
+    function closeMovieMenu() { document.getElementById("movieMenuOverlay").style.display = "none"; }
+    function deleteMovie(movieId) {
+      removeById(movies, movieId);
+      dbDelete("movies", movieId);
+      renderLibrary();
+    }
+    function openRenameOverlay() {
+      var m = findById(movies, editingMovieId);
+      if (!m) return;
+      document.getElementById("renameMovieInput").value = m.title;
+      closeMovieMenu();
+      document.getElementById("renameOverlay").style.display = "flex";
+    }
+    function saveRename() {
+      var m = findById(movies, editingMovieId);
+      var val = document.getElementById("renameMovieInput").value.trim();
+      if (m && val) { m.title = val; persistMovie(m); renderLibrary(); }
+      document.getElementById("renameOverlay").style.display = "none";
+    }
+    function openEditCategoriesOverlay() {
+      var m = findById(movies, editingMovieId);
+      if (!m) return;
+      var list = document.getElementById("editCatCheckboxList");
+      list.innerHTML = "";
+      categories.forEach(function (c) {
+        var row = document.createElement("label");
+        row.className = "catCheckboxRow";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = c.id;
+        cb.checked = m.categoryIds.indexOf(c.id) !== -1;
+        row.appendChild(cb);
+        var span = document.createElement("span");
+        span.textContent = c.name;
+        row.appendChild(span);
+        list.appendChild(row);
+      });
+      closeMovieMenu();
+      document.getElementById("editCategoriesOverlay").style.display = "flex";
+    }
+    function saveEditCategories() {
+      var m = findById(movies, editingMovieId);
+      if (m) {
+        var checked = Array.from(document.getElementById("editCatCheckboxList").querySelectorAll("input:checked")).map(function (cb) { return cb.value; });
+        m.categoryIds = checked;
+        persistMovie(m);
+        renderLibrary();
+      }
+      document.getElementById("editCategoriesOverlay").style.display = "none";
+    }
+
+    // ---------------- category management ----------------
+    function openCategoryManageOverlay() {
+      renderManageCategoryList();
+      document.getElementById("categoryManageOverlay").style.display = "flex";
+    }
+    function renderManageCategoryList() {
+      var list = document.getElementById("manageCategoryList");
+      list.innerHTML = "";
+      categories.forEach(function (c) {
+        var row = document.createElement("div");
+        row.className = "manageCategoryRow";
+        var span = document.createElement("span");
+        span.textContent = c.name;
+        row.appendChild(span);
+        var del = document.createElement("button");
+        del.textContent = "🗑️";
+        del.addEventListener("click", function () { deleteCategory(c.id); });
+        row.appendChild(del);
+        list.appendChild(row);
+      });
+    }
+    function addCategory(name) {
+      name = (name || "").trim();
+      if (!name) return null;
+      var cat = { id: uid("cat"), name: name };
+      categories.push(cat);
+      dbPut("categories", cat);
+      return cat;
+    }
+    function deleteCategory(catId) {
+      removeById(categories, catId);
+      dbDelete("categories", catId);
+      movies.forEach(function (m) {
+        var idx = m.categoryIds.indexOf(catId);
+        if (idx !== -1) { m.categoryIds.splice(idx, 1); persistMovie(m); }
+      });
+      renderManageCategoryList();
+      renderLibrary();
+    }
+
+    // ---------------- playback engine (shared: editor preview + watch mode) ----------------
+    function makePlaybackEngine(videoEl) {
+      var proj = null;
+      var clipIndex = 0;
+      var onClipChange = null;
+      var onEnd = null;
+
+      function load(project, startIndex, startTime) {
+        proj = project;
+        clipIndex = startIndex || 0;
+        playClipAt(clipIndex, startTime);
+      }
+      function playClipAt(idx, atTime) {
+        if (!proj || idx >= proj.clips.length) { if (onEnd) onEnd(); return; }
+        var clip = proj.clips[idx];
+        clip.soundEffects.forEach(function (sfx) { sfx._fired = false; });
+        videoEl.src = clip.objectUrl;
+        videoEl.playbackRate = clip.speed;
+        videoEl.volume = clip.volume;
+        videoEl.onloadedmetadata = function () {
+          videoEl.currentTime = atTime != null ? atTime : clip.trimStart;
+        };
+        if (onClipChange) onClipChange(idx);
+      }
+      function handleTimeUpdate() {
+        if (!proj) return;
+        var clip = proj.clips[clipIndex];
+        if (!clip) return;
+        clip.soundEffects.forEach(function (sfx) {
+          if (!sfx._fired && videoEl.currentTime >= sfx.time) { sfx._fired = true; playSoundEffect(sfx.effectId); }
+        });
+        if (videoEl.currentTime >= clip.trimEnd) { playClipAt(clipIndex + 1); clipIndex++; }
+      }
+      videoEl.addEventListener("timeupdate", handleTimeUpdate);
+      return {
+        load: load,
+        jumpTo: function (idx, atTime) { clipIndex = idx; playClipAt(idx, atTime); },
+        getClipIndex: function () { return clipIndex; },
+        onClipChange: function (cb) { onClipChange = cb; },
+        onEnd: function (cb) { onEnd = cb; },
+      };
+    }
+
+    // ---------------- watch mode ----------------
+    var watchEngine = null;
+    function watchMovie(movieId) {
+      var m = findById(movies, movieId);
+      if (!m || !m.clips.length) return;
+      if (!watchEngine) {
+        watchEngine = makePlaybackEngine(document.getElementById("watchVideo"));
+        watchEngine.onClipChange(function (idx) {
+          document.getElementById("watchInfoBar").textContent = "Clip " + (idx + 1) + " of " + m.clips.length;
+        });
+        watchEngine.onEnd(function () { exitWatch(); });
+      }
+      watchEngine.load(m, 0);
+      document.getElementById("watchVideo").play();
+      document.getElementById("watchScreen").style.display = "flex";
+    }
+    function exitWatch() {
+      document.getElementById("watchVideo").pause();
+      document.getElementById("watchScreen").style.display = "none";
+    }
+
+    // ---------------- editor ----------------
+    var editorEngine = null;
+    function openEditor() {
+      draftProject = newDraftProject();
+      document.getElementById("libraryScreen").style.display = "none";
+      document.getElementById("editorScreen").style.display = "block";
+      if (!editorEngine) {
+        editorEngine = makePlaybackEngine(document.getElementById("previewVideo"));
+        editorEngine.onClipChange(function (idx) { sfxTargetClipIndex = idx; });
+      }
+      renderEditor();
+    }
+    function closeEditor() {
+      document.getElementById("previewVideo").pause();
+      draftProject.clips.forEach(function (c) { if (c.objectUrl) URL.revokeObjectURL(c.objectUrl); });
+      draftProject = null;
+      document.getElementById("editorScreen").style.display = "none";
+      document.getElementById("libraryScreen").style.display = "block";
+    }
+    function addClipFromFile(file) {
+      var objectUrl = URL.createObjectURL(file);
+      var clip = newClip(file, objectUrl);
+      draftProject.clips.push(clip);
+      var probe = document.createElement("video");
+      probe.preload = "metadata";
+      probe.src = objectUrl;
+      probe.onloadedmetadata = function () {
+        var dur = isFinite(probe.duration) ? probe.duration : 0;
+        clip.duration = dur;
+        clip.trimEnd = dur;
+        captureClipThumbnail(clip, probe);
+        renderEditor();
+      };
+    }
+    function captureClipThumbnail(clip, videoEl) {
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = 160; canvas.height = 90;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        clip.thumbnail = canvas.toDataURL("image/jpeg", 0.7);
+      } catch (e) { /* thumbnail is a nice-to-have, safe to skip on failure */ }
+    }
+    function renderEditor() {
+      var hasClips = draftProject.clips.length > 0;
+      document.getElementById("previewEmptyMsg").style.display = hasClips ? "none" : "flex";
+      document.getElementById("addSfxBtn").disabled = !hasClips;
+      if (hasClips) editorEngine.load(draftProject, 0);
+
+      var list = document.getElementById("editorClipList");
+      list.innerHTML = "";
+      draftProject.clips.forEach(function (clip, idx) { list.appendChild(makeClipRow(clip, idx)); });
+    }
+    function makeClipRow(clip, idx) {
+      var row = document.createElement("div");
+      row.className = "clipRow";
+
+      var top = document.createElement("div");
+      top.className = "clipRowTop";
+      var thumb = document.createElement("div");
+      thumb.className = "clipThumb";
+      if (clip.thumbnail) thumb.style.backgroundImage = "url('" + clip.thumbnail + "')";
+      top.appendChild(thumb);
+      var info = document.createElement("div");
+      info.className = "clipRowInfo";
+      info.textContent = "Clip " + (idx + 1) + " · " + formatTime(clip.trimEnd - clip.trimStart) + " · " + clip.speed + "x";
+      top.appendChild(info);
+      row.appendChild(top);
+
+      var btns = document.createElement("div");
+      btns.className = "clipRowBtns";
+      var speedBtn = document.createElement("button");
+      speedBtn.textContent = "⏱️ " + clip.speed + "x";
+      speedBtn.addEventListener("click", function () { cycleClipSpeed(clip); });
+      btns.appendChild(speedBtn);
+      var upBtn = document.createElement("button");
+      upBtn.textContent = "⬆️";
+      upBtn.disabled = idx === 0;
+      upBtn.addEventListener("click", function () { moveClip(idx, -1); });
+      btns.appendChild(upBtn);
+      var downBtn = document.createElement("button");
+      downBtn.textContent = "⬇️";
+      downBtn.disabled = idx === draftProject.clips.length - 1;
+      downBtn.addEventListener("click", function () { moveClip(idx, 1); });
+      btns.appendChild(downBtn);
+      var delBtn = document.createElement("button");
+      delBtn.textContent = "🗑️";
+      delBtn.addEventListener("click", function () { deleteClip(clip.id); });
+      btns.appendChild(delBtn);
+      row.appendChild(btns);
+
+      var trimBar = document.createElement("div");
+      trimBar.className = "clipTrimBar";
+      var dur = Math.max(clip.duration, 0.01);
+      var range = document.createElement("div");
+      range.className = "trimActiveRange";
+      range.style.left = (clip.trimStart / dur * 100) + "%";
+      range.style.width = ((clip.trimEnd - clip.trimStart) / dur * 100) + "%";
+      trimBar.appendChild(range);
+      var startHandle = makeTrimHandle(clip, "start", trimBar);
+      var endHandle = makeTrimHandle(clip, "end", trimBar);
+      trimBar.appendChild(startHandle);
+      trimBar.appendChild(endHandle);
+      clip.soundEffects.forEach(function (sfx) {
+        var marker = document.createElement("div");
+        marker.className = "sfxMarker";
+        marker.style.left = (sfx.time / dur * 100) + "%";
+        var sfxDef = findById(SOUND_EFFECTS, sfx.effectId);
+        marker.textContent = sfxDef ? sfxDef.emoji : "🔊";
+        marker.addEventListener("click", function () { removeById(clip.soundEffects, sfx.id); renderEditor(); });
+        trimBar.appendChild(marker);
+      });
+      row.appendChild(trimBar);
+
+      var volRow = document.createElement("div");
+      volRow.className = "volumeRow";
+      var volLabel = document.createElement("span");
+      volLabel.textContent = "🔊";
+      volRow.appendChild(volLabel);
+      var volSlider = document.createElement("input");
+      volSlider.type = "range"; volSlider.min = "0"; volSlider.max = "100"; volSlider.value = Math.round(clip.volume * 100);
+      volSlider.addEventListener("input", function () { clip.volume = volSlider.value / 100; });
+      volRow.appendChild(volSlider);
+      row.appendChild(volRow);
+
+      return row;
+    }
+    function makeTrimHandle(clip, which, trimBar) {
+      var handle = document.createElement("div");
+      handle.className = "trimHandle";
+      var dur = Math.max(clip.duration, 0.01);
+      handle.style.left = ((which === "start" ? clip.trimStart : clip.trimEnd) / dur * 100) + "%";
+      var dragging = false;
+      handle.addEventListener("pointerdown", function (e) { e.preventDefault(); dragging = true; if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId); });
+      handle.addEventListener("pointermove", function (e) {
+        if (!dragging) return;
+        var rect = trimBar.getBoundingClientRect();
+        var pct = clampNum((e.clientX - rect.left) / rect.width, 0, 1);
+        var t = pct * dur;
+        if (which === "start") clip.trimStart = clampNum(t, 0, clip.trimEnd - 0.1);
+        else clip.trimEnd = clampNum(t, clip.trimStart + 0.1, dur);
+        renderEditor();
+      });
+      handle.addEventListener("pointerup", function () { dragging = false; });
+      return handle;
+    }
+    function cycleClipSpeed(clip) {
+      var idx = SPEED_OPTIONS.indexOf(clip.speed);
+      clip.speed = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+      renderEditor();
+    }
+    function moveClip(idx, dir) {
+      var newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= draftProject.clips.length) return;
+      var tmp = draftProject.clips[idx];
+      draftProject.clips[idx] = draftProject.clips[newIdx];
+      draftProject.clips[newIdx] = tmp;
+      renderEditor();
+    }
+    function deleteClip(clipId) {
+      var clip = findById(draftProject.clips, clipId);
+      if (clip && clip.objectUrl) URL.revokeObjectURL(clip.objectUrl);
+      removeById(draftProject.clips, clipId);
+      renderEditor();
+    }
+
+    // ---------------- sound effect placement ----------------
+    function openSfxPalette() {
+      document.getElementById("previewVideo").pause();
+      var grid = document.getElementById("sfxPaletteGrid");
+      grid.innerHTML = "";
+      SOUND_EFFECTS.forEach(function (sfxDef) {
+        var b = document.createElement("button");
+        b.className = "sfxBtn";
+        b.innerHTML = '<span class="sfxEmoji">' + sfxDef.emoji + '</span>' + sfxDef.label;
+        b.addEventListener("click", function () { placeSfxAtPlayhead(sfxDef.id); });
+        grid.appendChild(b);
+      });
+      document.getElementById("sfxPaletteOverlay").style.display = "flex";
+    }
+    function closeSfxPalette() { document.getElementById("sfxPaletteOverlay").style.display = "none"; }
+    function placeSfxAtPlayhead(effectId) {
+      var idx = editorEngine.getClipIndex();
+      var clip = draftProject.clips[idx];
+      if (!clip) { closeSfxPalette(); return; }
+      var time = document.getElementById("previewVideo").currentTime;
+      clip.soundEffects.push({ id: uid("sfx"), time: time, effectId: effectId });
+      closeSfxPalette();
+      playSoundEffect(effectId);
+      renderEditor();
+    }
+
+    // ---------------- save movie ----------------
+    function openSaveMovieOverlay() {
+      if (!draftProject.clips.length) return;
+      document.getElementById("newMovieTitleInput").value = draftProject.title || "";
+      renderSaveCategoryList();
+      document.getElementById("saveMovieOverlay").style.display = "flex";
+    }
+    function renderSaveCategoryList() {
+      var list = document.getElementById("catCheckboxList");
+      list.innerHTML = "";
+      categories.forEach(function (c) {
+        var row = document.createElement("label");
+        row.className = "catCheckboxRow";
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = c.id;
+        cb.checked = draftProject.categoryIds.indexOf(c.id) !== -1;
+        row.appendChild(cb);
+        var span = document.createElement("span");
+        span.textContent = c.name;
+        row.appendChild(span);
+        list.appendChild(row);
+      });
+    }
+    function addInlineCategory() {
+      var input = document.getElementById("newCategoryInput");
+      var cat = addCategory(input.value);
+      if (cat) { input.value = ""; renderSaveCategoryList(); }
+    }
+    function confirmSaveMovie() {
+      var title = document.getElementById("newMovieTitleInput").value.trim() || "My Movie";
+      var checked = Array.from(document.getElementById("catCheckboxList").querySelectorAll("input:checked")).map(function (cb) { return cb.value; });
+      draftProject.title = title;
+      draftProject.categoryIds = checked;
+      draftProject.createdAt = Date.now();
+      var firstClip = draftProject.clips[0];
+      draftProject.thumbnail = firstClip ? firstClip.thumbnail : null;
+      var record = {
+        id: draftProject.id, title: title, categoryIds: checked, isFavorite: false,
+        createdAt: draftProject.createdAt, thumbnail: draftProject.thumbnail,
+        clips: draftProject.clips.map(function (c) {
+          return { id: c.id, blob: c.blob, duration: c.duration, trimStart: c.trimStart, trimEnd: c.trimEnd, speed: c.speed, volume: c.volume, soundEffects: c.soundEffects, thumbnail: c.thumbnail };
+        })
+      };
+      dbPut("movies", record).then(function () {
+        movies.push(hydrateMovie(record));
+        document.getElementById("saveMovieOverlay").style.display = "none";
+        closeEditor();
+        renderLibrary();
+      });
+    }
+    function hydrateMovie(record) {
+      record.clips.forEach(function (c) { if (!c.objectUrl && c.blob) c.objectUrl = URL.createObjectURL(c.blob); });
+      return record;
+    }
+
+    // ---------------- init / wiring ----------------
+    document.getElementById("newMovieBtn").addEventListener("click", openEditor);
+    document.getElementById("editorCancelBtn").addEventListener("click", closeEditor);
+    document.getElementById("editorSaveBtn").addEventListener("click", openSaveMovieOverlay);
+    document.getElementById("addClipBtn").addEventListener("click", function () { document.getElementById("clipFileInput").click(); });
+    document.getElementById("clipFileInput").addEventListener("change", function (e) {
+      var file = e.target.files[0];
+      if (file) addClipFromFile(file);
+      e.target.value = "";
+    });
+    document.getElementById("previewPlayBtn").addEventListener("click", function () {
+      var v = document.getElementById("previewVideo");
+      if (v.paused) { v.play(); document.getElementById("previewPlayBtn").textContent = "⏸️ Pause"; }
+      else { v.pause(); document.getElementById("previewPlayBtn").textContent = "▶️ Play"; }
+    });
+    document.getElementById("addSfxBtn").addEventListener("click", openSfxPalette);
+    document.getElementById("sfxPaletteCancelBtn").addEventListener("click", closeSfxPalette);
+
+    document.getElementById("saveMovieCancelBtn").addEventListener("click", function () { document.getElementById("saveMovieOverlay").style.display = "none"; });
+    document.getElementById("saveMovieConfirmBtn").addEventListener("click", confirmSaveMovie);
+    document.getElementById("addInlineCategoryBtn").addEventListener("click", addInlineCategory);
+
+    document.getElementById("watchExitBtn").addEventListener("click", exitWatch);
+
+    document.getElementById("movieMenuCloseBtn").addEventListener("click", closeMovieMenu);
+    document.getElementById("menuFavoriteBtn").addEventListener("click", function () { toggleFavorite(editingMovieId); closeMovieMenu(); });
+    document.getElementById("menuRenameBtn").addEventListener("click", openRenameOverlay);
+    document.getElementById("menuCategoriesBtn").addEventListener("click", openEditCategoriesOverlay);
+    document.getElementById("menuDeleteBtn").addEventListener("click", function () { deleteMovie(editingMovieId); closeMovieMenu(); });
+
+    document.getElementById("renameCancelBtn").addEventListener("click", function () { document.getElementById("renameOverlay").style.display = "none"; });
+    document.getElementById("renameSaveBtn").addEventListener("click", saveRename);
+    document.getElementById("editCatCancelBtn").addEventListener("click", function () { document.getElementById("editCategoriesOverlay").style.display = "none"; });
+    document.getElementById("editCatSaveBtn").addEventListener("click", saveEditCategories);
+
+    document.getElementById("manageCategoriesBtn").addEventListener("click", openCategoryManageOverlay);
+    document.getElementById("categoryManageCloseBtn").addEventListener("click", function () { document.getElementById("categoryManageOverlay").style.display = "none"; });
+    document.getElementById("manageAddCategoryBtn").addEventListener("click", function () {
+      var input = document.getElementById("manageNewCategoryInput");
+      if (addCategory(input.value)) { input.value = ""; renderManageCategoryList(); }
+    });
+
+    function init() {
+      Promise.all([dbGetAll("movies"), dbGetAll("categories")]).then(function (results) {
+        movies = results[0].map(hydrateMovie);
+        categories = results[1];
+        renderLibrary();
+      });
+    }
+    init();
+  </script>
+</body>
+</html>
